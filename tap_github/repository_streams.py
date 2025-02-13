@@ -2620,3 +2620,76 @@ class TagsStream(GitHubRestStream):
         th.Property("tarball_url", th.StringType),
         th.Property("node_id", th.StringType),
     ).to_dict()
+
+
+class StatusesStream(GitHubRestStream):
+    """
+    A stream dedicated to fetching commit statuses for a reference (SHA, branch name, or tag name).
+    See: https://docs.github.com/en/rest/commits/statuses
+    """
+
+    name = "statuses"
+    path = "/repos/{org}/{repo}/commits/{ref}/statuses"
+    primary_keys: ClassVar[list[str]] = ["id"]
+    replication_key = "created_at"
+    parent_stream_type = CommitsStream  # Use CommitsStream as parent to get refs
+    ignore_parent_replication_key = True
+    state_partitioning_keys: ClassVar[list[str]] = ["repo", "org", "ref"]
+
+    def get_child_context(self, record: dict, context: dict | None) -> dict:
+        """Create context dict for child streams."""
+        return {
+            "org": context["org"] if context else None,
+            "repo": context["repo"] if context else None,
+            "repo_id": context["repo_id"] if context else None,
+            "ref": record["sha"] if record else None,  # Get SHA from parent CommitsStream
+        }
+
+    def post_process(self, row: dict, context: dict | None = None) -> dict:
+        """Process the row adding additional context."""
+        row = super().post_process(row, context)
+        if context:
+            row["ref"] = context["ref"]
+        return row
+
+    schema = th.PropertiesList(
+        # Parent Keys
+        th.Property("repo", th.StringType),
+        th.Property("org", th.StringType), 
+        th.Property("repo_id", th.IntegerType),
+        th.Property("ref", th.StringType),
+        # Status Keys
+        th.Property("url", th.StringType),
+        th.Property("avatar_url", th.StringType),
+        th.Property("id", th.IntegerType),
+        th.Property("node_id", th.StringType),
+        th.Property("state", th.StringType),
+        th.Property("description", th.StringType),
+        th.Property("target_url", th.StringType),
+        th.Property("context", th.StringType),
+        th.Property("created_at", th.DateTimeType),
+        th.Property("updated_at", th.DateTimeType),
+        th.Property(
+            "creator",
+            th.ObjectType(
+                th.Property("login", th.StringType),
+                th.Property("id", th.IntegerType),
+                th.Property("node_id", th.StringType),
+                th.Property("avatar_url", th.StringType),
+                th.Property("gravatar_id", th.StringType),
+                th.Property("url", th.StringType),
+                th.Property("html_url", th.StringType),
+                th.Property("followers_url", th.StringType),
+                th.Property("following_url", th.StringType),
+                th.Property("gists_url", th.StringType),
+                th.Property("starred_url", th.StringType),
+                th.Property("subscriptions_url", th.StringType),
+                th.Property("organizations_url", th.StringType),
+                th.Property("repos_url", th.StringType),
+                th.Property("events_url", th.StringType),
+                th.Property("received_events_url", th.StringType),
+                th.Property("type", th.StringType),
+                th.Property("site_admin", th.BooleanType),
+            ),
+        ),
+    ).to_dict()
